@@ -1,0 +1,248 @@
+1. Evan McLaughlin 
+2. 
+  let p = "
+    read a
+    read b
+    read c
+    sum := ((a*b)+(b*c)+(c*a))/3
+    write sum";;
+
+  PT_nt
+ ("P",
+  [PT_nt
+    ("SL",
+     [PT_nt ("S", [PT_term "read"; PT_id "a"]);
+      PT_nt
+       ("SL",
+        [PT_nt ("S", [PT_term "read"; PT_id "b"]);
+         PT_nt
+          ("SL",
+           [PT_nt ("S", [PT_term "read"; PT_id "c"]);
+            PT_nt
+             ("SL",
+              [PT_nt
+                ("S",
+                 [PT_id "sum"; PT_term ":=";
+                  PT_nt
+                   ("E",
+                    [PT_nt
+                      ("T",
+                       [PT_nt
+                         ("F",
+                          [PT_term "(";
+                           PT_nt
+                            ("E",
+                             [PT_nt
+                               ("T",
+                                [PT_nt
+                                  ("F",
+                                   [PT_term "(";
+                                    PT_nt
+                                     ("E",
+                                      [PT_nt
+                                        ("T",
+                                         [PT_nt ("F", [PT_id "a"]);
+                                          PT_nt
+                                           ("FT",
+                                            [PT_nt ("mo", [PT_term "*"]);
+                                             PT_nt ("F", [PT_id "b"]);
+                                             PT_nt ("FT", [])])]);
+                                       PT_nt ("TT", [])]);
+                                    PT_term ")"]);
+                                 PT_nt ("FT", [])]);
+                              PT_nt
+                               ("TT",
+                                [PT_nt ("ao", [PT_term "+"]);
+                                 PT_nt
+                                  ("T",
+                                   [PT_nt
+                                     ("F",
+                                      [PT_term "(";
+                                       PT_nt
+                                        ("E",
+                                         [PT_nt
+                                           ("T",
+                                            [PT_nt ("F", [PT_id "b"]);
+                                             PT_nt
+                                              ("FT",
+                                               [PT_nt ("mo", [PT_term "*"]);
+                                                PT_nt ("F", [PT_id "c"]);
+                                                PT_nt ("FT", [])])]);
+                                          PT_nt ("TT", [])]);
+                                       PT_term ")"]);
+                                    PT_nt ("FT", [])]);
+                                 PT_nt
+                                  ("TT",
+                                   [PT_nt ("ao", [PT_term "+"]);
+                                    PT_nt
+                                     ("T",
+                                      [PT_nt
+                                        ("F",
+                                         [PT_term "(";
+                                          PT_nt
+                                           ("E",
+                                            [PT_nt
+                                              ("T",
+                                               [PT_nt ("F", [PT_id "c"]);
+                                                PT_nt
+                                                 ("FT",
+                                                  [PT_nt
+                                                    ("mo", [PT_term "*"]);
+                                                   PT_nt ("F", [PT_id "a"]);
+                                                   PT_nt ("FT", [])])]);
+                                             PT_nt ("TT", [])]);
+                                          PT_term ")"]);
+                                       PT_nt ("FT", [])]);
+                                    PT_nt ("TT", [])])])]);
+                           PT_term ")"]);
+                        PT_nt
+                         ("FT",
+                          [PT_nt ("mo", [PT_term "/"]);
+                           PT_nt ("F", [PT_num "3"]); PT_nt ("FT", [])])]);
+                     PT_nt ("TT", [])])]);
+               PT_nt
+                ("SL",
+                 [PT_nt
+                   ("S",
+                    [PT_term "write"; PT_nt ("E", [PT_nt ("T", [...]); ...]);
+                     ...]);
+                  ...]);
+               ...]);
+            ...]);
+         ...]);
+      ...]);
+   ...])
+
+
+  let q = "
+    read a b
+    read c
+    sum := ((a*b)+(b*c)+(c*a))/3
+    write sum";; 
+
+  # parse ecg_parse_table p;;
+  syntax error: expected := ; saw read
+  - : parse_tree = PT_error
+
+  The grammar is unable to parse a "read" with two ids following it. Thus, returns a PT_error. 
+
+3. 
+  read n 
+  sum := 0
+  count := n
+  while n > 0
+    read num
+    sum := sum + num
+    n := n - 1
+  end
+  avg := sum / count
+  write avg 
+
+# parse ecg_parse_table q;;
+- : parse_tree =
+PT_nt
+ ("P",
+  [PT_nt
+    ("SL",
+     [PT_nt ("S", [PT_term "read"; PT_id "n"]);
+      PT_nt
+       ("SL",
+        [PT_nt
+          ("S",
+           [PT_id "sum"; PT_term ":=";
+            PT_nt
+             ("E",
+              [PT_nt ("T", [PT_nt ("F", [PT_num "0"]); PT_nt ("FT", [])]);
+               PT_nt ("TT", [])])]);
+         PT_nt
+          ("SL",
+           [PT_nt
+             ("S",
+              [PT_id "count"; PT_term ":=";
+               PT_nt
+                ("E",
+                 [PT_nt ("T", [PT_nt ("F", [PT_id "n"]); PT_nt ("FT", [])]);
+                  PT_nt ("TT", [])])]);
+            PT_nt
+             ("SL",
+              [PT_nt
+                ("S",
+                 [PT_term "while";
+                  PT_nt
+                   ("C",
+                    [PT_nt
+                      ("E",
+                       [PT_nt
+                         ("T", [PT_nt ("F", [PT_id "n"]); PT_nt ("FT", [])]);
+                        PT_nt ("TT", [])]);
+                     PT_nt ("rn", [PT_term ">"]);
+                     PT_nt
+                      ("E",
+                       [PT_nt
+                         ("T", [PT_nt ("F", [PT_num "0"]); PT_nt ("FT", [])]);
+                        PT_nt ("TT", [])])]);
+                  PT_nt
+                   ("SL",
+                    [PT_nt ("S", [PT_term "read"; PT_id "num"]);
+                     PT_nt
+                      ("SL",
+                       [PT_nt
+                         ("S",
+                          [PT_id "sum"; PT_term ":=";
+                           PT_nt
+                            ("E",
+                             [PT_nt
+                               ("T",
+                                [PT_nt ("F", [PT_id "sum"]);
+                                 PT_nt ("FT", [])]);
+                              PT_nt
+                               ("TT",
+                                [PT_nt ("ao", [PT_term "+"]);
+                                 PT_nt
+                                  ("T",
+                                   [PT_nt ("F", [PT_id "num"]);
+                                    PT_nt ("FT", [])]);
+                                 PT_nt ("TT", [])])])]);
+                        PT_nt
+                         ("SL",
+                          [PT_nt
+                            ("S",
+                             [PT_id "n"; PT_term ":=";
+                              PT_nt
+                               ("E",
+                                [PT_nt
+                                  ("T",
+                                   [PT_nt ("F", [PT_id "n"]);
+                                    PT_nt ("FT", [])]);
+                                 PT_nt
+                                  ("TT",
+                                   [PT_nt ("ao", [PT_term "-"]);
+                                    PT_nt
+                                     ("T",
+                                      [PT_nt ("F", [PT_num "1"]);
+                                       PT_nt ("FT", [])]);
+                                    PT_nt ("TT", [])])])]);
+                           PT_nt ("SL", [])])])]);
+                  PT_term "end"]);
+               PT_nt
+                ("SL",
+                 [PT_nt
+                   ("S",
+                    [PT_id "avg"; PT_term ":=";
+                     PT_nt ("E", [PT_nt (...); ...]); ...]);
+                  ...]);
+               ...]);
+            ...]);
+         ...]);
+      ...]);
+   ...])
+
+4. 
+  let fact n = 
+    factorial n 1;; 
+  let rec factorial n p = 
+    if n = 1 || n = 0 then p 
+    else factorial (n-1) (p*n) ;;
+
+  let binomial n k = 
+    fact n / ( fact k * fact (n-k) );;  

@@ -537,33 +537,6 @@ let ecg_parse_table = get_parse_table ecg;;
   working solution to the assignment.  You are welcome, of course, to
   use a different organization if you prefer.  This is provided in the
   hope you may find it useful.
-
-    Uses the following attribute grammar to build a syntax tree: 
-    P -> SL{P.val := SL.val}
-    SL1 -> S{SL2.st := "SL1.st, S.val"} SL2{SL1.val := SL2.val}  
-    SL -> e {SL.val := SL.st }
-    S -> id := E {S.val := ":=, id, E.val"}
-    S -> read id {S.val := "read id"}
-    S -> write E {S.val := "write E.val"}
-    S -> if C{SL.st := C.val} SL{S.val := "if, C.val, SL.val"} end 
-    S -> while C{SL.st := C.val} SL{S.val := "while, C.val, SL.val"} end 
-    C -> E1 == E2{C.val := "==, E1.val, E2.val"}
-    C -> E1 != E2{C.val := "!=, E1.val, E2.val"}
-    C -> E1 > E2{C.val := ">, E1.val, E2.val"}
-    C -> E1 < E2{C.val := "<, E1.val, E2.val"}
-    C -> E1 >= E2{C.val := ">=, E1.val, E2.val"}
-    C -> E1 <= E2{C.val := "<=, E1.val, E2.val"}
-    E -> T{TT.st := T.val} TT{E.val := TT.val}  
-    TT1 -> + T{TT2.st := "+, TT1.st, T.val"} TT2{TT1.val := TT2.val}
-    TT1 -> - T{TT2.st := "-, TT1.st, T.val"} TT2{TT1.val := TT2.val}
-    TT -> e {TT.val := TT.st}
-    T -> F{FT.st := F.val} FT{T.val := FT.val}
-    FT1 -> * F{FT2.st := "*, FT1.st, F.val"} FT2{FT1.val := FT2.val}
-    FT1 -> / F{FT2.st := "/, FT1.st, F.val"} FT2{FT1.val := FT2.val}
-    FT -> e {FT.val := FT.st}
-    F -> ( E ){F.val := E.val}
-    F -> id{F.val := "id"}
-    F -> lit{F.val := "lit"}
  *******************************************************************)
 
 type ast_sl = ast_s list
@@ -582,38 +555,23 @@ and ast_c = (string * ast_e * ast_e);;
 
 let rec ast_ize_P (p:parse_tree) : ast_sl =
   (* your code should replace the following line *)
-  (*[]*)
-  (*evan implementation*)
-  match p with
-  | PT_nt ("P", [sl; PT_term "$$"]) 
-        -> ast_ize_SL sl
+  []
 
 and ast_ize_SL (sl:parse_tree) : ast_sl =
   match sl with
-  | PT_nt ("SL", []) 
-        -> []
-  | PT_nt ("SL" s) 
+  | PT_nt ("SL", []) -> []
   (*
      your code here ...
   *)
-
   | _ -> raise (Failure "malformed parse tree in ast_ize_SL")
 
 and ast_ize_S (s:parse_tree) : ast_s =
   match s with
   | PT_nt ("S", [PT_id lhs; PT_term ":="; expr])
         -> AST_assign (lhs, (ast_ize_expr expr))
-
-  (* begin evan implementation *)
-  | PT_nt ("S", [PT_term "read"; PT_id lhs;])
-        -> AST_read lhs
-  | PT_nt ("S", [PT_term "write"; expr])
-        -> AST_write expr
-  | PT_nt ("S", [PT_term "while"; cond; sl, PT_term "end")
-        -> AST_while (cond, (ast_ize_sl sl))
-  | PT_nt ("S", [PT_term "if"; cond; SL, PT_term "end")
-        -> AST_if (cond, (ast_ize_sl sl))
-
+  (*
+     your code here ...
+  *)
   | _ -> raise (Failure "malformed parse tree in ast_ize_S")
 
 and ast_ize_expr (e:parse_tree) : ast_e =
@@ -742,7 +700,7 @@ let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 *)
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
-(*
+
 let main () =
 
 	
@@ -765,6 +723,6 @@ let main () =
     (* should print "unexpected end of input" *)
 
   print_newline ();;
-*)
-(* Execute function "main" iff run as a stand-alone program. 
-if !Sys.interactive then () else main ();; *)
+
+(* Execute function "main" iff run as a stand-alone program. *)
+if !Sys.interactive then () else main ();; 

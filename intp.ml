@@ -587,12 +587,16 @@ let rec ast_ize_P (p:parse_tree) : ast_sl =
   match p with
   | PT_nt ("P", [sl; PT_term "$$"]) 
         -> ast_ize_SL sl
+  | _ -> raise (Failure "malformed parse tree in ast_ize_P")
 
 and ast_ize_SL (sl:parse_tree) : ast_sl =
   match sl with
   | PT_nt ("SL", []) 
         -> []
-  | PT_nt ("SL" s) 
+	(*| PT_nt ("S", [s; sl])
+	   -> append ([ast_ize_S s,  ast_ize_SL sl]) *
+		
+		How do we do this?? ^^^ *)
   (*
      your code here ...
   *)
@@ -608,12 +612,11 @@ and ast_ize_S (s:parse_tree) : ast_s =
   | PT_nt ("S", [PT_term "read"; PT_id lhs;])
         -> AST_read lhs
   | PT_nt ("S", [PT_term "write"; expr])
-        -> AST_write expr
-  | PT_nt ("S", [PT_term "while"; cond; sl, PT_term "end")
-        -> AST_while (cond, (ast_ize_sl sl))
-  | PT_nt ("S", [PT_term "if"; cond; SL, PT_term "end")
-        -> AST_if (cond, (ast_ize_sl sl))
-
+        -> AST_write (ast_ize_expr expr)
+  | PT_nt ("S", [PT_term "while"; cond; sl; PT_term "end"])
+        -> AST_while ((ast_ize_C cond), (ast_ize_SL sl)) 
+  | PT_nt ("S", [PT_term "if"; cond; sl; PT_term "end"])
+        -> AST_if ((ast_ize_C cond), (ast_ize_SL sl))
   | _ -> raise (Failure "malformed parse tree in ast_ize_S")
 
 and ast_ize_expr (e:parse_tree) : ast_e =
@@ -742,7 +745,7 @@ let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 *)
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
-(*
+
 let main () =
 
 	
@@ -765,6 +768,6 @@ let main () =
     (* should print "unexpected end of input" *)
 
   print_newline ();;
-*)
+
 (* Execute function "main" iff run as a stand-alone program. 
 if !Sys.interactive then () else main ();; *)

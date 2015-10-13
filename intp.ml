@@ -582,8 +582,6 @@ and ast_c = (string * ast_e * ast_e);;
 
 (* P -> SL{P.val := SL.val} *)
 let rec ast_ize_P (p:parse_tree) : ast_sl =
-  (* your code should replace the following line *)
-  (*[]*)
   (*evan implementation*)
   match p with
   | PT_nt ("P", [sl; PT_term "$$"]) 
@@ -593,17 +591,10 @@ let rec ast_ize_P (p:parse_tree) : ast_sl =
     SL -> e {SL.val := SL.st } *)
 and ast_ize_SL (sl:parse_tree) : ast_sl =
   match sl with
-  (*
-  | PT_nt ("SL", [PT_nt s; PT_nt sl] )
-      -> 
-  *)
-
+  | PT_nt ("S", [s; sl])
+     -> [ast_ize_S s;] @ ast_ize_SL sl
   | PT_nt ("SL", []) 
         -> []
-	(*| PT_nt ("S", [s; sl])
-	   -> append ([ast_ize_S s,  ast_ize_SL sl]) *
-		
-		How do we do this?? ^^^ *)
   | _ -> raise (Failure "malformed parse tree in ast_ize_SL")
 
 (* S -> id := E {S.val := ":=, id, E.val"}
@@ -635,7 +626,12 @@ and ast_ize_S (s:parse_tree) : ast_s =
 and ast_ize_expr (e:parse_tree) : ast_e =
   (* e is an E, T, or F parse tree node *)
   match e with
-  (* So how could we properly return value for e or t with AST_binop? *)
+  | PT_nt ("E", [t; tt;] ) 
+      -> let st = ast_ize_expr t in  
+      (ast_ize_expr_tail st tt )
+  | PT_nt ("T", [f; ft;] ) 
+      -> let st = ast_ize_expr f in  
+      (ast_ize_expr_tail st ft )
   | PT_nt ("F", [PT_term "("; expr; PT_term ")";] ) 
       -> (ast_ize_expr expr )
   | PT_nt ("F", [PT_id id;] ) 
@@ -656,16 +652,20 @@ and ast_ize_expr_tail (lhs:ast_e) (tail:parse_tree) :ast_e =
      tail is a TT or FT parse tree node *)
   match tail with
   | PT_nt ("TT", [PT_term "+"; lhs; tt;] )
-      -> AST_binop ("+", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters, but i want to do this more elegantly *) tt)
+      -> let t = ast_ize_expr lhs in 
+      AST_binop ("+", t, ast_ize_expr_tail t tt)
   | PT_nt ("TT", [PT_term "-"; lhs; tt;] )
-      -> AST_binop ("-", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters*) tt)
+      -> let t = ast_ize_expr lhs in
+      AST_binop ("-", t, ast_ize_expr_tail t tt)
   | PT_nt ("TT", [] )
       -> (lhs)
   | PT_nt ("FT", [PT_term "*"; lhs; ft;] )
-      -> AST_binop ("*", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters*) ft)
+      -> let f = ast_ize_expr lhs in 
+      AST_binop ("*", f, ast_ize_expr_tail f ft)
   | PT_nt ("FT", [PT_term "/"; lhs; ft;] )
-      -> AST_binop ("/", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters*) ft)
-   | PT_nt ("FT", [] )
+      -> let f = ast_ize_expr lhs in 
+      AST_binop ("/", f, ast_ize_expr_tail f ft)
+  | PT_nt ("FT", [] )
       -> (lhs)
   | _ -> raise (Failure "malformed parse tree in ast_ize_expr_tail")
 (* C -> E1 == E2{C.val := "==, E1.val, E2.val"}

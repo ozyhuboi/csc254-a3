@@ -580,6 +580,7 @@ and ast_e =
 | AST_num of string
 and ast_c = (string * ast_e * ast_e);;
 
+(* P -> SL{P.val := SL.val} *)
 let rec ast_ize_P (p:parse_tree) : ast_sl =
   (* your code should replace the following line *)
   (*[]*)
@@ -588,21 +589,28 @@ let rec ast_ize_P (p:parse_tree) : ast_sl =
   | PT_nt ("P", [sl; PT_term "$$"]) 
         -> ast_ize_SL sl
   | _ -> raise (Failure "malformed parse tree in ast_ize_P")
-
+(* SL1 -> S{SL2.st := "SL1.st, S.val"} SL2{SL1.val := SL2.val}  
+    SL -> e {SL.val := SL.st } *)
 and ast_ize_SL (sl:parse_tree) : ast_sl =
   match sl with
+  (*
+  | PT_nt ("SL", [PT_nt s; PT_nt sl] )
+      -> 
+  *)
+
   | PT_nt ("SL", []) 
         -> []
 	(*| PT_nt ("S", [s; sl])
 	   -> append ([ast_ize_S s,  ast_ize_SL sl]) *
 		
 		How do we do this?? ^^^ *)
-  (*
-     your code here ...
-  *)
-
   | _ -> raise (Failure "malformed parse tree in ast_ize_SL")
 
+(* S -> id := E {S.val := ":=, id, E.val"}
+    S -> read id {S.val := "read id"}
+    S -> write E {S.val := "write E.val"}
+    S -> if C{SL.st := C.val} SL{S.val := "if, C.val, SL.val"} end 
+    S -> while C{SL.st := C.val} SL{S.val := "while, C.val, SL.val"} end  *)
 and ast_ize_S (s:parse_tree) : ast_s =
   match s with
   | PT_nt ("S", [PT_id lhs; PT_term ":="; expr])
@@ -619,28 +627,67 @@ and ast_ize_S (s:parse_tree) : ast_s =
         -> AST_if ((ast_ize_C cond), (ast_ize_SL sl))
   | _ -> raise (Failure "malformed parse tree in ast_ize_S")
 
+(*  E -> T{TT.st := T.val} TT{E.val := TT.val}   
+    T -> F{FT.st := F.val} FT{T.val := FT.val}
+    F -> ( E ){F.val := E.val}
+    F -> id{F.val := "id"}
+    F -> lit{F.val := "lit"}*)
 and ast_ize_expr (e:parse_tree) : ast_e =
   (* e is an E, T, or F parse tree node *)
   match e with
-  (*
-     your code here ...
-  *)
+  (* So how could we properly return value for e or t with AST_binop? *)
+  | PT_nt ("F", [PT_term "("; expr; PT_term ")";] ) 
+      -> (ast_ize_expr expr )
+  | PT_nt ("F", [PT_id id;] ) 
+      -> AST_id (id)
+  | PT_nt ("F", [PT_num num;] ) 
+      -> AST_num (num )
   | _ -> raise (Failure "malformed parse tree in ast_ize_expr")
+
+(*  TT1 -> + T{TT2.st := "+, TT1.st, T.val"} TT2{TT1.val := TT2.val}
+    TT1 -> - T{TT2.st := "-, TT1.st, T.val"} TT2{TT1.val := TT2.val}
+    TT -> e {TT.val := TT.st}
+    FT1 -> * F{FT2.st := "*, FT1.st, F.val"} FT2{FT1.val := FT2.val}
+    FT1 -> / F{FT2.st := "/, FT1.st, F.val"} FT2{FT1.val := FT2.val}
+    FT -> e {FT.val := FT.st} *)
 
 and ast_ize_expr_tail (lhs:ast_e) (tail:parse_tree) :ast_e =
   (* lhs in an inherited attribute.
      tail is a TT or FT parse tree node *)
   match tail with
-  (*
-     your code here ...
-  *)
+  | PT_nt ("TT", [PT_term "+"; lhs; tt;] )
+      -> AST_binop ("+", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters, but i want to do this more elegantly *) tt)
+  | PT_nt ("TT", [PT_term "-"; lhs; tt;] )
+      -> AST_binop ("-", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters*) tt)
+  | PT_nt ("TT", [] )
+      -> (lhs)
+  | PT_nt ("FT", [PT_term "*"; lhs; ft;] )
+      -> AST_binop ("*", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters*) ft)
+  | PT_nt ("FT", [PT_term "/"; lhs; ft;] )
+      -> AST_binop ("/", ast_ize_expr lhs, ast_ize_expr_tail (* ast_ize_expr lhs, cause two parameters*) ft)
+   | PT_nt ("FT", [] )
+      -> (lhs)
   | _ -> raise (Failure "malformed parse tree in ast_ize_expr_tail")
-
+(* C -> E1 == E2{C.val := "==, E1.val, E2.val"}
+    C -> E1 != E2{C.val := "!=, E1.val, E2.val"}
+    C -> E1 > E2{C.val := ">, E1.val, E2.val"}
+    C -> E1 < E2{C.val := "<, E1.val, E2.val"}
+    C -> E1 >= E2{C.val := ">=, E1.val, E2.val"}
+    C -> E1 <= E2{C.val := "<=, E1.val, E2.val"} *)
 and ast_ize_C (c:parse_tree) : ast_c =
   match c with
-  (*
-     your code here ...
-  *)
+  | PT_nt ("C", [ e1; PT_term "=="; e2;] )
+      ->  ("==", (ast_ize_expr e1), (ast_ize_expr e2) )
+  | PT_nt ("C", [ e1; PT_term "!="; e2;] )
+      ->  ("!=", (ast_ize_expr e1), (ast_ize_expr e2) )
+  | PT_nt ("C", [ e1; PT_term ">"; e2;] )
+      ->  (">", (ast_ize_expr e1), (ast_ize_expr e2) )
+  | PT_nt ("C", [ e1; PT_term "<"; e2;] )
+      ->  ("<", (ast_ize_expr e1), (ast_ize_expr e2) )
+  | PT_nt ("C", [ e1; PT_term ">="; e2;] )
+      ->  (">=", (ast_ize_expr e1), (ast_ize_expr e2) )
+  | PT_nt ("C", [ e1; PT_term "<="; e2;] )
+      ->  ("<=", (ast_ize_expr e1), (ast_ize_expr e2) )
   | _ -> raise (Failure "malformed parse tree in ast_ize_C")
 ;;
 
@@ -745,7 +792,7 @@ let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 *)
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
-
+(*
 let main () =
 
 	
@@ -768,6 +815,6 @@ let main () =
     (* should print "unexpected end of input" *)
 
   print_newline ();;
-
+*)
 (* Execute function "main" iff run as a stand-alone program. 
 if !Sys.interactive then () else main ();; *)

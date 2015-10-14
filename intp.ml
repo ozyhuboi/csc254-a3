@@ -30,6 +30,8 @@ open Str;;      (* for split *)
         ocamlc str.cma interpreter.ml
 *)
 
+open Format;; 
+
 (* Surprisingly, compose isn't built in.  It's included in various
    widely used commercial packages, but not in the core libraries. *)
 let compose f g x = f (g x);;
@@ -419,8 +421,9 @@ let reduce_1_prod (astack:parse_tree list) (rhs_len:int) : parse_tree list =
     | _ -> raise (Failure "expected nonterminal at top of astack") in
    helper astack rhs_len [];;
 
-(*
+
 let sum_ave_prog = "read a read b sum := a + b write sum write sum / 2";;
+
 let primes_prog = "
      read n
      cp := 2
@@ -447,7 +450,7 @@ let primes_prog = "
          end
          cp := cp + 1
      end";;
-*)
+
 type parse_action = PA_error | PA_prediction of string list;;
 (* Double-index to find prediction (list of RHS symbols) for
    nonterminal nt and terminal t.
@@ -591,7 +594,7 @@ let rec ast_ize_P (p:parse_tree) : ast_sl =
     SL -> e {SL.val := SL.st } *)
 and ast_ize_SL (sl:parse_tree) : ast_sl =
   match sl with
-  | PT_nt ("S", [s; sl])
+  | PT_nt ("SL", [s; sl])
      -> [ast_ize_S s;] @ ast_ize_SL sl
   | PT_nt ("SL", []) 
         -> []
@@ -604,6 +607,7 @@ and ast_ize_SL (sl:parse_tree) : ast_sl =
     S -> while C{SL.st := C.val} SL{S.val := "while, C.val, SL.val"} end  *)
 and ast_ize_S (s:parse_tree) : ast_s =
   match s with
+  
   | PT_nt ("S", [PT_id lhs; PT_term ":="; expr])
         -> AST_assign (lhs, (ast_ize_expr expr))
 
@@ -616,7 +620,9 @@ and ast_ize_S (s:parse_tree) : ast_s =
         -> AST_while ((ast_ize_C cond), (ast_ize_SL sl)) 
   | PT_nt ("S", [PT_term "if"; cond; sl; PT_term "end"])
         -> AST_if ((ast_ize_C cond), (ast_ize_SL sl))
+        
   | _ -> raise (Failure "malformed parse tree in ast_ize_S")
+
 
 (*  E -> T{TT.st := T.val} TT{E.val := TT.val}   
     T -> F{FT.st := F.val} FT{T.val := FT.val}
@@ -629,9 +635,12 @@ and ast_ize_expr (e:parse_tree) : ast_e =
   | PT_nt ("E", [t; tt;] ) 
       -> let st = ast_ize_expr t in  
       (ast_ize_expr_tail st tt )
+
   | PT_nt ("T", [f; ft;] ) 
       -> let st = ast_ize_expr f in  
       (ast_ize_expr_tail st ft )
+
+
   | PT_nt ("F", [PT_term "("; expr; PT_term ")";] ) 
       -> (ast_ize_expr expr )
   | PT_nt ("F", [PT_id id;] ) 
@@ -651,22 +660,22 @@ and ast_ize_expr_tail (lhs:ast_e) (tail:parse_tree) :ast_e =
   (* lhs in an inherited attribute.
      tail is a TT or FT parse tree node *)
   match tail with
-  | PT_nt ("TT", [PT_term "+"; lhs; tt;] )
-      -> let t = ast_ize_expr lhs in 
-      AST_binop ("+", t, ast_ize_expr_tail t tt)
-  | PT_nt ("TT", [PT_term "-"; lhs; tt;] )
-      -> let t = ast_ize_expr lhs in
-      AST_binop ("-", t, ast_ize_expr_tail t tt)
+  | PT_nt ("TT", [PT_nt ("ao", [PT_term "+"]); t; tt;] )
+      -> let st = ast_ize_expr t in 
+      ast_ize_expr_tail (AST_binop ("+", lhs, st)) tt
+  | PT_nt ("TT", [PT_nt ("ao", [PT_term "-"]); t; tt;] )
+      -> let st = ast_ize_expr t in 
+      ast_ize_expr_tail (AST_binop ("-", lhs, st)) tt
   | PT_nt ("TT", [] )
-      -> (lhs)
-  | PT_nt ("FT", [PT_term "*"; lhs; ft;] )
+      -> lhs
+  | PT_nt ("FT", [PT_nt ("mo", [PT_term "*"]);lhs; ft;] )
       -> let f = ast_ize_expr lhs in 
-      AST_binop ("*", f, ast_ize_expr_tail f ft)
-  | PT_nt ("FT", [PT_term "/"; lhs; ft;] )
+      AST_binop ("*", f, (ast_ize_expr_tail f ft))
+  | PT_nt ("FT", [PT_nt ("mo", [PT_term "/"]); lhs; ft;] )
       -> let f = ast_ize_expr lhs in 
       AST_binop ("/", f, ast_ize_expr_tail f ft)
   | PT_nt ("FT", [] )
-      -> (lhs)
+      -> lhs
   | _ -> raise (Failure "malformed parse tree in ast_ize_expr_tail")
 (* C -> E1 == E2{C.val := "==, E1.val, E2.val"}
     C -> E1 != E2{C.val := "!=, E1.val, E2.val"}
@@ -676,17 +685,17 @@ and ast_ize_expr_tail (lhs:ast_e) (tail:parse_tree) :ast_e =
     C -> E1 <= E2{C.val := "<=, E1.val, E2.val"} *)
 and ast_ize_C (c:parse_tree) : ast_c =
   match c with
-  | PT_nt ("C", [ e1; PT_term "=="; e2;] )
+  | PT_nt ("C", [ e1; PT_nt ("rn", [PT_term "=="]); e2;] )
       ->  ("==", (ast_ize_expr e1), (ast_ize_expr e2) )
-  | PT_nt ("C", [ e1; PT_term "!="; e2;] )
+  | PT_nt ("C", [ e1; PT_nt ("rn", [PT_term "!="]); e2;] )
       ->  ("!=", (ast_ize_expr e1), (ast_ize_expr e2) )
-  | PT_nt ("C", [ e1; PT_term ">"; e2;] )
+  | PT_nt ("C", [ e1; PT_nt ("rn", [PT_term ">"]); e2;] )
       ->  (">", (ast_ize_expr e1), (ast_ize_expr e2) )
-  | PT_nt ("C", [ e1; PT_term "<"; e2;] )
+  | PT_nt ("C", [ e1; PT_nt ("rn", [PT_term "<"]); e2;] )
       ->  ("<", (ast_ize_expr e1), (ast_ize_expr e2) )
-  | PT_nt ("C", [ e1; PT_term ">="; e2;] )
+  | PT_nt ("C", [ e1; PT_nt ("rn", [PT_term ">="]); e2;] )
       ->  (">=", (ast_ize_expr e1), (ast_ize_expr e2) )
-  | PT_nt ("C", [ e1; PT_term "<="; e2;] )
+  | PT_nt ("C", [ e1; PT_nt ("rn", [PT_term "<="]); e2;] )
       ->  ("<=", (ast_ize_expr e1), (ast_ize_expr e2) )
   | _ -> raise (Failure "malformed parse tree in ast_ize_C")
 ;;
@@ -783,18 +792,39 @@ and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
 
 (*******************************************************************
     Testing
- ******************************************************************
+ ******************************************************************)
 
 let sum_ave_parse_tree = parse ecg_parse_table sum_ave_prog;;
 let sum_ave_syntax_tree = ast_ize_P sum_ave_parse_tree;;
 
 let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
-*)
+
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
+(*
+let prog = "a := 1 + 2";;
+let prog_test = parse ecg_parse_table prog;; 
+let ast_prog = ast_ize_P prog_test;; 
+*)
 (*
 let main () =
 
+  print_newline ();;
+  print_newline ();;
+  print_newline ();;
+  print_newline ();;
+  print_string("SUP BRO BEING CALLED FROM MAIN");
+
+  print_newline ();;
+  print_newline ();;
+  print_newline ();;
+  
+  parse ecg_parse_table prog;;
+  print_newline ();;
+  print_newline ();;
+  print_newline ();;
+  print_string (ecg_run prog "");
+(*
 	
   print_string (interpret sum_ave_syntax_tree "4 6");
     (* should print "10 5" *)
@@ -814,7 +844,14 @@ let main () =
   print_string (ecg_run "read a read b" "3");
     (* should print "unexpected end of input" *)
 
+*)
   print_newline ();;
 *)
+
+ (* #use "intp.ml";; *)
+
 (* Execute function "main" iff run as a stand-alone program. 
 if !Sys.interactive then () else main ();; *)
+(*
+main();;
+*)

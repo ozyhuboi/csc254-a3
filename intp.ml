@@ -741,29 +741,30 @@ let str_cat a b =
    for valid integer format.
 *)
 let rec interpret (ast:ast_sl) (full_input:string) : string =
-  let inp = split (regexp "[ \t\n]+") full_input in
-  let (_, _, _, outp) = interpret_sl ast [] inp [] in
-    (fold_left str_cat "" outp) ^ " \n"
+    let inp = split (regexp "[ \t\n]+") full_input in
+    let (_, _, _, outp) = interpret_sl ast [] inp [] in
+        (fold_left str_cat "" outp) ^ " \n"
 
-and interpret_sl (sl:ast_sl) (mem:memory)
+    and interpret_sl (sl:ast_sl) (mem:memory)
                  (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
     (* ok?   new_mem       new_input     new_output *)
-  (* We want to recursively run interpret_sl for the tail each element in ast_sl *)
   (* if ast_sl only has one element, we run interpret_s on it, 
       else we run interpret_s on the head and recursively run interpret_sl on the tail *)
-  let head = hd sl in 
-    if (length sl) == 1 then interpret_s head mem inp outp 
-    else let tail = tl sl in 
-      interpret_sl tail mem inp outp ;
-      interpret_s head mem inp outp ;
+    let head = hd sl in 
+        if (length sl) == 1 then 
+            interpret_s head mem inp outp 
+        else let tail = tl sl in 
+        (* Need to merge memories and output of s into sl and have that returned *)
+            let (_, mem1, inp1, outp1) = interpret_s head mem inp outp in
+                let (_, mem2, inp2, outp2) = interpret_sl tail mem1 inp1 outp1 in
 
-  (true, mem, inp, outp) 
+  (true, mem2, inp2, outp2) 
 
 (* NB: the following routine is complete.  You can call it on any
    statement node and it figures out what more specific case to invoke.
 *)
-and interpret_s (s:ast_s) (mem:memory)
+    and interpret_s (s:ast_s) (mem:memory)
                 (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
     (* For the passed-in ast, we match it to a form and send it to its proper subroutine for interpretation *)
@@ -775,7 +776,7 @@ and interpret_s (s:ast_s) (mem:memory)
   | AST_while(cond, sl)  -> interpret_while cond sl mem inp outp
   | AST_error            -> raise (Failure "cannot interpret erroneous tree")
 
-and interpret_assign (lhs:string) (rhs:ast_e) (mem:memory)
+    and interpret_assign (lhs:string) (rhs:ast_e) (mem:memory)
                      (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
   (* let us save lhs in value   *)
@@ -783,43 +784,103 @@ and interpret_assign (lhs:string) (rhs:ast_e) (mem:memory)
 
 
 (* read a, id = a , mem = [], inp = 10, outp = [] *)
-and interpret_read (id:string) (mem:memory)
+    and interpret_read (id:string) (mem:memory)
                    (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-  
-  (true, mem, inp, outp)
+  (* your code should replace the following line *)
+  (*(true, mem, inp, outp)*)
+
+  (*Input validation - is the input a string? !!!!!!*)
+  let mem_c = mem @ [(id , (int_of_string (hd inp)));] in 
+  (true, mem_c, (tl inp), outp)
 
 (* write a, expr = a, mem = [], inp = 10, outp = []*)
-and interpret_write (expr:ast_e) (mem:memory)
+    and interpret_write (expr:ast_e) (mem:memory)
                     (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-  (* we take in expression expr, run interpret_expr on it, 
-    if the value is an id, then we look it up in memory and save to val
-    else we simply take the interpreted expression and save to val
-    send val to outp 
-   *)
 
-  
-  (true, mem, inp, outp)
+  let new_outp = outp @ (interpret_expr expr mem) in
+  (true, mem, inp, new_outp)
 
-and interpret_if (cond:ast_c) (sl:ast_sl) (mem:memory)
+    and interpret_if (cond:ast_c) (sl:ast_sl) (mem:memory)
                  (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
   (* your code should replace the following line *)
   (true, mem, inp, outp)
 
-and interpret_while (cond:ast_c) (sl:ast_sl) (mem:memory)
+    and interpret_while (cond:ast_c) (sl:ast_sl) (mem:memory)
                     (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
   (* your code should replace the following line *)
   (true, mem, inp, outp)
-
+(*
 and interpret_expr (expr:ast_e) (mem:memory) 
     : value =
   (* colon value * memory = was removed as returning the memory was useless *)  
   
   match expr with 
-  | _ -> Error("code not written yet")
+  | _ -> Error("code not written yet") *)
+and interpret_expr (expr:ast_e) (mem:memory) : string list  =
+  (* your code should replace the following line *)
+  match expr with 
+
+  (*ADDITION*)
+  | AST_binop ("+", AST_num a, AST_num b) -> [string_of_int (int_of_string(a) + int_of_string(b))]
+  
+  
+  (*ID lookup conditions has to go inbetween these two*)
+  
+    (* E + num | num + E *)
+    | AST_binop ("+", a, AST_num b) -> 
+        let c = hd (interpret_expr a mem) in
+        [string_of_int (int_of_string(c) + int_of_string(b))]
+    | AST_binop ("+", AST_num a, b) -> 
+        let c = hd (interpret_expr b mem) in
+        [string_of_int (int_of_string(a) + int_of_string(c))]
+      
+    
+  (*SUBTRACTION*)
+  | AST_binop ("-", AST_num a, AST_num b) -> [string_of_int (int_of_string(a) - int_of_string(b))]
+    
+    (* E - num | num - E *)
+    | AST_binop ("-", b, AST_num a) -> 
+      let c = hd (interpret_expr b mem) in
+      [string_of_int (int_of_string(c) - int_of_string(a))]
+    | AST_binop ("-", AST_num a, b) -> 
+      let c = hd (interpret_expr b mem) in
+      [string_of_int (int_of_string(a) - int_of_string(c))]
+    
+  (*MULTIPLICATION*)
+  | AST_binop ("*", AST_num a, AST_num b) -> [string_of_int (int_of_string(a) * int_of_string(b))]
+  
+    (* E * num | num * E *)
+    | AST_binop ("*", b, AST_num a) -> 
+      let c = hd (interpret_expr b mem) in
+      [string_of_int (int_of_string(c) * int_of_string(a))]
+    | AST_binop ("*", AST_num a, b) -> 
+      let c = hd (interpret_expr b mem) in
+      [string_of_int (int_of_string(a) * int_of_string(c))]
+    
+  (*DIVISION*)
+  | AST_binop ("/", AST_num a, AST_num b) -> [string_of_int (int_of_string(a) / int_of_string(b))]
+    
+    (* E / num | num / E *)
+    | AST_binop ("/", a, AST_num b) -> 
+      let c = hd (interpret_expr a mem) in
+      [string_of_int (int_of_string (c) / int_of_string(b))]
+    | AST_binop ("/", AST_num a, b) -> 
+      let c = hd (interpret_expr b mem) in
+      [string_of_int (int_of_string(a) / int_of_string(c))]
+  
+  (*ID
+  | AST_id a -> [(lookup_id mem a)]
+  *)
+  (*NUMERIC*)
+  | AST_num a -> [a]
+
+
+  (* Not Found *)  
+  | _ -> ["404"] (*404 not found lol *)
   
 
 and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
@@ -840,6 +901,7 @@ and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
         -> Bool((interpret_expr lo mem) <= (interpret_expr ro mem))
   (* your code should replace the following line *)
     | _ -> Error("Runtime issue in cond\n")
+;; 
 
 
 (*******************************************************************
@@ -852,9 +914,10 @@ let sum_ave_syntax_tree = ast_ize_P sum_ave_parse_tree;;
 let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 
-let prog = "a := 5 * 3";;
+let prog = "write 3+4 write 4 write 7*2" ;;
 let prog_test = parse ecg_parse_table prog;; 
 let ast_prog = ast_ize_P prog_test;; 
+print_string (interpret ast_prog "")
 (* function to test interpretation of ecg *)
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
 

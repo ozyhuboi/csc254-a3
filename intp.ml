@@ -668,12 +668,12 @@ and ast_ize_expr_tail (lhs:ast_e) (tail:parse_tree) :ast_e =
       ast_ize_expr_tail (AST_binop ("-", lhs, st)) tt
   | PT_nt ("TT", [] )
       -> lhs
-  | PT_nt ("FT", [PT_nt ("mo", [PT_term "*"]);lhs; ft;] )
-      -> let f = ast_ize_expr lhs in 
-      AST_binop ("*", f, (ast_ize_expr_tail f ft))
-  | PT_nt ("FT", [PT_nt ("mo", [PT_term "/"]); lhs; ft;] )
-      -> let f = ast_ize_expr lhs in 
-      AST_binop ("/", f, ast_ize_expr_tail f ft)
+  | PT_nt ("FT", [PT_nt ("mo", [PT_term "*"]);f; ft;] )
+      -> let st = ast_ize_expr f in 
+      ast_ize_expr_tail (AST_binop ("*", lhs, st)) ft
+  | PT_nt ("FT", [PT_nt ("mo", [PT_term "/"]); f; ft;] )
+      -> let st = ast_ize_expr f in 
+      ast_ize_expr_tail (AST_binop ("/", lhs, st)) ft
   | PT_nt ("FT", [] )
       -> lhs
   | _ -> raise (Failure "malformed parse tree in ast_ize_expr_tail")
@@ -702,6 +702,20 @@ and ast_ize_C (c:parse_tree) : ast_c =
 
 (*******************************************************************
     Interpreter
+
+    type ast_sl = ast_s list
+      and ast_s =
+      | AST_error
+      | AST_assign of (string * ast_e)
+      | AST_read of string
+      | AST_write of ast_e
+      | AST_if of (ast_c * ast_sl)
+      | AST_while of (ast_c * ast_sl)
+      and ast_e =
+      | AST_binop of (string * ast_e * ast_e)
+      | AST_id of string
+      | AST_num of string
+      and ast_c = (string * ast_e * ast_e);;
  *******************************************************************)
 
 type memory = (string * int) list;;
@@ -711,6 +725,7 @@ type memory = (string * int) list;;
 
 type value =    (* an integer or an error message *)
 | Value of int
+| Bool of bool 
 | Error of string;;
 
 (* concatenate strings, with a space in between if both were nonempty *)
@@ -728,14 +743,22 @@ let str_cat a b =
 let rec interpret (ast:ast_sl) (full_input:string) : string =
   let inp = split (regexp "[ \t\n]+") full_input in
   let (_, _, _, outp) = interpret_sl ast [] inp [] in
-    (fold_left str_cat "" outp) ^ "\n"
+    (fold_left str_cat "" outp) ^ " \n"
 
 and interpret_sl (sl:ast_sl) (mem:memory)
                  (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
     (* ok?   new_mem       new_input     new_output *)
-  (* your code should replace the following line *)
-  (true, mem, inp, outp)
+  (* We want to recursively run interpret_sl for the tail each element in ast_sl *)
+  (* if ast_sl only has one element, we run interpret_s on it, 
+      else we run interpret_s on the head and recursively run interpret_sl on the tail *)
+  let head = hd sl in 
+    if (length sl) == 1 then interpret_s head mem inp outp 
+    else let tail = tl sl in 
+      interpret_sl tail mem inp outp ;
+      interpret_s head mem inp outp ;
+
+  (true, mem, inp, outp) 
 
 (* NB: the following routine is complete.  You can call it on any
    statement node and it figures out what more specific case to invoke.
@@ -743,6 +766,7 @@ and interpret_sl (sl:ast_sl) (mem:memory)
 and interpret_s (s:ast_s) (mem:memory)
                 (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
+    (* For the passed-in ast, we match it to a form and send it to its proper subroutine for interpretation *)
   match s with
   | AST_assign(id, expr) -> interpret_assign id expr mem inp outp
   | AST_read(id)         -> interpret_read id mem inp outp
@@ -754,19 +778,28 @@ and interpret_s (s:ast_s) (mem:memory)
 and interpret_assign (lhs:string) (rhs:ast_e) (mem:memory)
                      (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-  (* your code should replace the following line *)
+  (* let us save lhs in value   *)
   (true, mem, inp, outp)
 
+
+(* read a, id = a , mem = [], inp = 10, outp = [] *)
 and interpret_read (id:string) (mem:memory)
                    (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-  (* your code should replace the following line *)
+  
   (true, mem, inp, outp)
 
+(* write a, expr = a, mem = [], inp = 10, outp = []*)
 and interpret_write (expr:ast_e) (mem:memory)
                     (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-  (* your code should replace the following line *)
+  (* we take in expression expr, run interpret_expr on it, 
+    if the value is an id, then we look it up in memory and save to val
+    else we simply take the interpreted expression and save to val
+    send val to outp 
+   *)
+
+  
   (true, mem, inp, outp)
 
 and interpret_if (cond:ast_c) (sl:ast_sl) (mem:memory)
@@ -781,14 +814,33 @@ and interpret_while (cond:ast_c) (sl:ast_sl) (mem:memory)
   (* your code should replace the following line *)
   (true, mem, inp, outp)
 
-and interpret_expr (expr:ast_e) (mem:memory) : value * memory =
-  (* your code should replace the following line *)
-  (Error("code not written yet"), mem)
+and interpret_expr (expr:ast_e) (mem:memory) 
+    : value =
+  (* colon value * memory = was removed as returning the memory was useless *)  
+  
+  match expr with 
+  | _ -> Error("code not written yet")
+  
 
 and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
-    : value * memory =
+    (* colon value * memory = was removed as returning the memory was useless *)  
+    : value =  
+    match op with 
+    | "==" 
+        -> Bool((interpret_expr lo mem) == (interpret_expr ro mem))
+    | "!="    
+        -> Bool((interpret_expr lo mem) != (interpret_expr ro mem))
+    | ">"
+        -> Bool((interpret_expr lo mem) > (interpret_expr ro mem))
+    | "<"
+        -> Bool((interpret_expr lo mem) < (interpret_expr ro mem))
+    | ">=" 
+        -> Bool((interpret_expr lo mem) >= (interpret_expr ro mem))
+    | "<="
+        -> Bool((interpret_expr lo mem) <= (interpret_expr ro mem))
   (* your code should replace the following line *)
-  (Error("code not written yet"), mem)
+    | _ -> Error("Runtime issue in cond\n")
+
 
 (*******************************************************************
     Testing
@@ -800,30 +852,12 @@ let sum_ave_syntax_tree = ast_ize_P sum_ave_parse_tree;;
 let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 
-let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
-(*
-let prog = "a := 1 + 2";;
+let prog = "a := 5 * 3";;
 let prog_test = parse ecg_parse_table prog;; 
 let ast_prog = ast_ize_P prog_test;; 
-*)
-(*
-let main () =
+(* function to test interpretation of ecg *)
+let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
 
-  print_newline ();;
-  print_newline ();;
-  print_newline ();;
-  print_newline ();;
-  print_string("SUP BRO BEING CALLED FROM MAIN");
-
-  print_newline ();;
-  print_newline ();;
-  print_newline ();;
-  
-  parse ecg_parse_table prog;;
-  print_newline ();;
-  print_newline ();;
-  print_newline ();;
-  print_string (ecg_run prog "");
 (*
 	
   print_string (interpret sum_ave_syntax_tree "4 6");
@@ -833,7 +867,7 @@ let main () =
     (* should print "2 3 5 7 11 13 17 19 23 29" *)
   print_newline ();
   print_string (interpret sum_ave_syntax_tree "4 foo");
-    (* should print "non-numeric input" *)
+    (* should print "non-numeric input" *)in
   print_newline ();
   print_string (ecg_run "write 3 write 2 / 0" "");
     (* should print "3 divide by zero" *)
@@ -844,8 +878,6 @@ let main () =
   print_string (ecg_run "read a read b" "3");
     (* should print "unexpected end of input" *)
 
-*)
-  print_newline ();;
 *)
 
  (* #use "intp.ml";; *)

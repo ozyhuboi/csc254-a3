@@ -766,15 +766,39 @@ let error_of_val (v:value) : string =
 (* take in memory and id, looks up id name and return its value, else error *)
 let rec lookup_id (mem:memory) (id:string) : value =
   match mem with
-  |[] -> false;
+  |[] -> Bool(false);
   |_ ->
     if (fst (hd mem) = id) then Value (snd (hd mem))
     (*What if the id isn't in memory?*)
     else lookup_id (tl mem) id
 ;;
-let rec change_val (mem:memory) (val:value) : memory = 
 
-    ;;
+let rec change_val (old_mem:memory) (new_mem:memory) (id:string) (v:int) : memory =
+  (*print_string ("\nUpdating Value of :  ");
+  print_string (id); print_string ( "->" ); print_int v;
+  print_string ("\n");*)
+  match old_mem with 
+  | [] -> (new_mem @ [id, v]);
+  | _ -> if (fst (hd old_mem) = id) then begin
+          (*print_string (fst (hd old_mem)); print_string (" : (match) " ); print_int v;*)
+          change_val (tl old_mem) new_mem id v; (*skip*)
+          end
+        else begin
+          (*print_string (fst (hd old_mem)); print_string (" : " ) ; print_int (snd (hd old_mem)); print_string ("  |"); *)
+          change_val (tl old_mem) (new_mem @ [hd old_mem]) id v; (*append old to new*)
+        end
+  ;;
+
+(*http://pleac.sourceforge.net/pleac_ocaml/numbers.html*)
+let is_Integer s =
+    try ignore(int_of_string s); true with Failure _ -> false;;
+
+let error_of_val (v:value) : string = 
+    match v with 
+    | Error v -> v
+    | _ -> raise (Failure "Value to an error")
+;;
+
 
 let get_1_3 (a,_,_) = a;;
 let get_2_3 (_,a,_) = a;;
@@ -803,10 +827,13 @@ let rec interpret (ast:ast_sl) (full_input:string) : string =
                     interpret_s head mem inp outp 
                 else let tail = tl sl in 
                 (* Need to merge memories and output of s into sl and have that returned *)
-                    let (_, mem1, inp1, outp1) = interpret_s head mem inp outp in
-                        let (_, mem2, inp2, outp2) = interpret_sl tail mem1 inp1 outp1 in
-
-    (true, mem2, inp2, outp2) 
+                    let (a, mem1, inp1, outp1) = interpret_s head mem inp outp in
+                        if(a) then begin
+                          (*print_string("We returned a valid statement");*)
+                          let (b, mem2, inp2, outp2) = interpret_sl tail mem1 inp1 outp1 in
+                              (b, mem2, inp2, outp2) 
+                        end
+                        else (false, mem1, inp1, outp1)
 
 (* NB: the following routine is complete.  You can call it on any
    statement node and it figures out what more specific case to invoke.
@@ -828,23 +855,29 @@ let rec interpret (ast:ast_sl) (full_input:string) : string =
     : bool * memory * string list * string list =
     (* let us save lhs as name, rhs as value   
         if lhs is the same as a name already in the list, then replace the value of the name *)
-        let id = lookup_id lhs in 
-            if (bool_of_val id) = false then
-                let mem1 = mem @ [(lhs, int_of_val(interpret_expr rhs mem) );] in 
-                    (true, mem1, inp, outp)
-            else 
-            (* need function that will find the right id to replace and change the value *)
-
-        
-    (true, mem1, inp, outp)
+        let v = (int_of_val (interpret_expr rhs mem)) in 
+        let mem1 = change_val mem [] lhs v in
+        (true, mem1, inp, outp)
 
     and interpret_read (id:string) (mem:memory)
                    (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
 
     (*Input validation - is the input a string? !!!!!!*)
-        let mem_c = mem @ [(id , (int_of_string (hd inp)));] in 
-    (true, mem_c, (tl inp), outp)
+        if length inp = 0 then (false, mem, inp, outp @ [("unexpected end of input")])
+            else begin
+      (* Validate Integer input *)
+        if (is_Integer (hd inp)) then begin
+            let r = (int_of_string (hd inp)) in 
+            let mem_c = mem @ [(id , r);] in 
+                (true, mem_c, (tl inp), outp);
+        end
+      
+        else begin 
+            print_string("RETURNED A BAD THING"); 
+            (false, mem, inp, outp @ [(hd inp ^ ": Not an Integer")]) 
+        end
+        end
 
     and interpret_write (expr:ast_e) (mem:memory)
                     (inp:string list) (outp:string list)
@@ -864,7 +897,7 @@ let rec interpret (ast:ast_sl) (full_input:string) : string =
     : bool * memory * string list * string list =
     (* if the cond holds, recursively run through sl and pass in the new memory and output values
         else simply return what's left  *)
-        print_string "Entering while \n";
+        (*print_string "Entering while \n";*)
         if (bool_of_val (interpret_cond cond mem)) then 
             let (_,mem1, inp1, outp1) = interpret_sl sl mem inp outp in 
                 interpret_while cond sl mem1 inp1 outp1
@@ -940,7 +973,8 @@ and interpret_expr (expr:ast_e) (mem:memory) : value =
     (*DIVISION*)
     (* num / num *)
     | AST_binop ("/", AST_num a, AST_num b) 
-        -> Value (int_of_string(a) / int_of_string(b))
+        -> if int_of_string(b) = 0 then Error("Error, divide by zero")
+          else Value (int_of_string(a) / int_of_string(b))
     (* E / num *)
     | AST_binop ("/", a, AST_num b) -> 
          let c = interpret_expr a mem in
@@ -970,7 +1004,7 @@ and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
     : value =  
     match op with 
     | "==" 
-        -> Bool((interpret_expr lo mem) == (interpret_expr ro mem))
+        -> Bool((interpret_expr lo mem) = (interpret_expr ro mem))
     | "!="     
         -> Bool((interpret_expr lo mem) != (interpret_expr ro mem))
     | ">" 
@@ -995,15 +1029,16 @@ and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
 (*
 let sum_ave_parse_tree = parse ecg_parse_table sum_ave_prog;;
 let sum_ave_syntax_tree = ast_ize_P sum_ave_parse_tree;;
-
+*)
 let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
-*)
-(* let prog = "i := 0 while i < 2 write i i := i + 1 end write 10" ;; *)
-let prog = "i := 0 write i i := i + 1 write i write (0+1) write 10"
+
+(*
+let prog = "i := 0 while i < 5 write i i := i + 1 end write 10"
 let prog_test = parse ecg_parse_table prog;; 
 let ast_prog = ast_ize_P prog_test;; 
 print_string (interpret ast_prog "")
+*)
 
 (* function to test interpretation of ecg *)
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
@@ -1013,9 +1048,12 @@ let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
   print_string (interpret sum_ave_syntax_tree "4 6");
     (* should print "10 5" *)
   print_newline ();
+*)
+
   print_string (interpret primes_syntax_tree "10");
     (* should print "2 3 5 7 11 13 17 19 23 29" *)
   print_newline ();
+  (*
   print_string (interpret sum_ave_syntax_tree "4 foo");
     (* should print "non-numeric input" *)in
   print_newline ();

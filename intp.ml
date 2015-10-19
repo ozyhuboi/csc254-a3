@@ -594,7 +594,6 @@ and ast_ize_S (s:parse_tree) : ast_s =
         -> AST_while ((ast_ize_C cond), (ast_ize_SL sl)) 
   | PT_nt ("S", [PT_term "if"; cond; sl; PT_term "end"])
         -> AST_if ((ast_ize_C cond), (ast_ize_SL sl))
-        
   | _ -> raise (Failure "malformed parse tree in ast_ize_S")
 
 
@@ -613,8 +612,6 @@ and ast_ize_expr (e:parse_tree) : ast_e =
   | PT_nt ("T", [f; ft;] ) 
       -> let st = ast_ize_expr f in  
       (ast_ize_expr_tail st ft )
-
-
   | PT_nt ("F", [PT_term "("; expr; PT_term ")";] ) 
       -> (ast_ize_expr expr )
   | PT_nt ("F", [PT_id id;] ) 

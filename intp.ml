@@ -734,21 +734,20 @@ let str_cat a b =
   | (a, "") -> a
   | ("", b) -> b
   | (_, _) -> a ^ " " ^ b;;
-
+(* to string for the variant value *)
 let string_of_val (v:value) : string = 
     match v with 
     | Value v -> string_of_int v
     | Bool v -> string_of_bool v
     | Error v -> v
-    | _ -> "Error, how did you do that?"
 ;;
-
+(* converts values to ints *)
 let int_of_val (v:value) : int = 
     match v with 
     | Value v -> v
     | _ -> raise (Failure "Value to an int")
 ;;
-
+(* converts values to booleans *)
 let bool_of_val (v:value) : bool = 
     match v with 
     | Bool v -> 
@@ -756,23 +755,15 @@ let bool_of_val (v:value) : bool =
     | _ -> raise (Failure "Value not a boolean")
 
 ;;
-
-let error_of_val (v:value) : string = 
-    match v with 
-    | Error v -> v
-    | _ -> raise (Failure "Value to an error")
-;;
-
 (* take in memory and id, looks up id name and return its value, else error *)
 let rec lookup_id (mem:memory) (id:string) : value =
   match mem with
-  |[] -> Bool(false);
+  |[] -> Error (id ^ " : value not found");
   |_ ->
     if (fst (hd mem) = id) then Value (snd (hd mem))
-    (*What if the id isn't in memory?*)
     else lookup_id (tl mem) id
 ;;
-
+(* takes in memory with id and new value to change the value at that memory id, returns new memory*)
 let rec change_val (old_mem:memory) (new_mem:memory) (id:string) (v:int) : memory =
   (*print_string ("\nUpdating Value of :  ");
   print_string (id); print_string ( "->" ); print_int v;
@@ -793,16 +784,6 @@ let rec change_val (old_mem:memory) (new_mem:memory) (id:string) (v:int) : memor
 let is_Integer s =
     try ignore(int_of_string s); true with Failure _ -> false;;
 
-let error_of_val (v:value) : string = 
-    match v with 
-    | Error v -> v
-    | _ -> raise (Failure "Value to an error")
-;;
-
-
-let get_1_3 (a,_,_) = a;;
-let get_2_3 (_,a,_) = a;;
-let get_3_3 (_,_,a) = a;;
 (* Input to a calculator program is just a sequence of numbers.  We use
    the standard Str library to split the single input string into
    whitespace-separated words, each of which is subsequently checked
@@ -830,7 +811,7 @@ let rec interpret (ast:ast_sl) (full_input:string) : string =
                     let (a, mem1, inp1, outp1) = interpret_s head mem inp outp in
                         if(a) then begin
                           (*print_string("We returned a valid statement");*)
-                          let (b, mem2, inp2, outp2) = interpret_sl tail mem1 inp1 outp1 in
+                            let (b, mem2, inp2, outp2) = interpret_sl tail mem1 inp1 outp1 in
                               (b, mem2, inp2, outp2) 
                         end
                         else (false, mem1, inp1, outp1)
@@ -865,53 +846,57 @@ let rec interpret (ast:ast_sl) (full_input:string) : string =
 
     (*Input validation - is the input a string? !!!!!!*)
         if length inp = 0 then (false, mem, inp, outp @ [("unexpected end of input")])
-            else begin
-      (* Validate Integer input *)
-        if (is_Integer (hd inp)) then begin
-            let r = (int_of_string (hd inp)) in 
-            let mem_c = mem @ [(id , r);] in 
+        else begin
+            (* Validate Integer input *)
+            if (is_Integer (hd inp)) then begin
+                let r = (int_of_string (hd inp)) in 
+                let mem_c = mem @ [(id , r);] in 
                 (true, mem_c, (tl inp), outp);
-        end
-      
-        else begin 
-            print_string("RETURNED A BAD THING"); 
-            (false, mem, inp, outp @ [(hd inp ^ ": Not an Integer")]) 
-        end
+            end
+            else begin 
+                (*print_string("RETURNED A BAD THING"); *)
+                (false, mem, inp, outp @ [(hd inp ^ ": non-numeric input")]) 
+            end
         end
 
     and interpret_write (expr:ast_e) (mem:memory)
                     (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-        let new_outp = outp @ [string_of_int(int_of_val (interpret_expr expr mem));] in
-    (true, mem, inp, new_outp)
+    (* if expr returns an error, then false else evaluate expr and output new output*)
+        let v = interpret_expr expr mem in 
+            match v with (*Warning 8: this pattern-matching is not exhaustive. Here is an example of a value that is not matched: Bool _ *)
+            | Error(err) -> (false, mem, inp, outp @ [err])
+            | Value(_) -> 
+                let new_outp = outp @ [string_of_int(int_of_val (v));] in
+                    (true, mem, inp, new_outp)
 
     and interpret_if (cond:ast_c) (sl:ast_sl) (mem:memory)
                  (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
+    (* if the cond is true, then interpret the statements inside, else skip *)
         let v = interpret_cond cond mem in
-            if (bool_of_val v) then interpret_sl sl mem inp outp
-            else (true, mem, inp, outp)
+        match v with 
+            | Error(err) -> (false, mem, inp, outp @ [err])
+            | _ ->
+            let v = interpret_cond cond mem in
+                if (bool_of_val v) then interpret_sl sl mem inp outp
+                else (true, mem, inp, outp)
 
     and interpret_while (cond:ast_c) (sl:ast_sl) (mem:memory)
                     (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
     (* if the cond holds, recursively run through sl and pass in the new memory and output values
         else simply return what's left  *)
-        (*print_string "Entering while \n";*)
-        if (bool_of_val (interpret_cond cond mem)) then 
-            let (_,mem1, inp1, outp1) = interpret_sl sl mem inp outp in 
-                interpret_while cond sl mem1 inp1 outp1
-        else
-
+        let v = interpret_cond cond mem in
+        match v with 
+        | Error(err) -> (false, mem, inp, outp @ [err])
+        |_ ->
+            if (bool_of_val (interpret_cond cond mem)) then 
+                let (_,mem1, inp1, outp1) = interpret_sl sl mem inp outp in 
+                    interpret_while cond sl mem1 inp1 outp1
+            else
     (true, mem, inp, outp) 
 
-(*
-and interpret_expr (expr:ast_e) (mem:memory) 
-    : value =
-  (* colon value * memory = was removed as returning the memory was useless *)  
-  
-  match expr with 
-  | _ -> Error("code not written yet") *)
 and interpret_expr (expr:ast_e) (mem:memory) : value =
     match expr with 
 
@@ -970,24 +955,27 @@ and interpret_expr (expr:ast_e) (mem:memory) : value =
         let d = interpret_expr b mem in
         Value (int_of_val(c) * int_of_val(d))
         
-    (*DIVISION*)
+    (*DIVISION, remember to check for divide by zero *)
     (* num / num *)
-    | AST_binop ("/", AST_num a, AST_num b) 
-        -> if int_of_string(b) = 0 then Error("Error, divide by zero")
-          else Value (int_of_string(a) / int_of_string(b))
+    | AST_binop ("/", AST_num a, AST_num b) -> 
+        if int_of_string(b) = 0 then Error("Error: divide by zero")
+        else Value (int_of_string(a) / int_of_string(b))
     (* E / num *)
     | AST_binop ("/", a, AST_num b) -> 
-         let c = interpret_expr a mem in
-        Value (int_of_val(c) / int_of_string(b))
+        let c = interpret_expr a mem in
+            if int_of_string(b) = 0 then Error("Error: divide by zero")
+            else Value (int_of_val(c) / int_of_string(b))
     (* num / E *) 
     | AST_binop ("/", AST_num a, b) -> 
-       let c = interpret_expr b mem in
-        Value (int_of_string(a) / int_of_val(c))
+        let c = interpret_expr b mem in
+        if int_of_val(c) = 0 then Error("Error: divide by zero")
+        else Value (int_of_string(a) / int_of_val(c))
     (* E / E *)
     | AST_binop ("/", a, b) -> 
         let c = interpret_expr a mem in
         let d = interpret_expr b mem in
-        Value (int_of_val(c) / int_of_val(d))
+        if int_of_val(d) = 0 then Error("Error: divide by zero")
+        else Value (int_of_val(c) / int_of_val(d))
     
     (*ID*)
     | AST_id a -> lookup_id mem a
@@ -1000,23 +988,29 @@ and interpret_expr (expr:ast_e) (mem:memory) : value =
   
 
 and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
-    (* colon value * memory = was removed as returning the memory was useless *)  
     : value =  
-    match op with 
-    | "==" 
-        -> Bool((interpret_expr lo mem) = (interpret_expr ro mem))
-    | "!="     
-        -> Bool((interpret_expr lo mem) != (interpret_expr ro mem))
-    | ">" 
-        -> Bool((interpret_expr lo mem) > (interpret_expr ro mem))
-    | "<"
-        -> Bool((interpret_expr lo mem) < (interpret_expr ro mem))
-    | ">=" 
-        -> Bool((interpret_expr lo mem) >= (interpret_expr ro mem))
-    | "<=" 
-        -> Bool((interpret_expr lo mem) <= (interpret_expr ro mem))
-  (* your code should replace the following line *)
-    | _ -> Error("Runtime issue in cond\n")
+    (* match up operator, then evaluate expressions *)
+    let one = (interpret_expr lo mem) in
+        let two = (interpret_expr ro mem) in 
+        match one with (*Here is an example of a value that is not matched: Bool _ *)
+        | Error(err) -> one (*return bad value *)
+        | Value(v) -> 
+            match two with (*Here is an example of a value that is not matched: Bool _*)
+            | Error(err2) -> two (*return bad value *)
+            | Value(v2) -> match op with 
+                | "==" 
+                    -> Bool((interpret_expr lo mem) = (interpret_expr ro mem))
+                | "!="     
+                    -> Bool((interpret_expr lo mem) != (interpret_expr ro mem))
+                | ">" 
+                    -> Bool((interpret_expr lo mem) > (interpret_expr ro mem))
+                | "<"
+                    -> Bool((interpret_expr lo mem) < (interpret_expr ro mem))
+                | ">=" 
+                    -> Bool((interpret_expr lo mem) >= (interpret_expr ro mem))
+                | "<=" 
+                    -> Bool((interpret_expr lo mem) <= (interpret_expr ro mem))
+                | _ -> Error("Runtime issue in cond\n")
 
 ;;
 
@@ -1026,47 +1020,48 @@ and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
 (*******************************************************************
     Testing
  ******************************************************************)
-(*
+
 let sum_ave_parse_tree = parse ecg_parse_table sum_ave_prog;;
 let sum_ave_syntax_tree = ast_ize_P sum_ave_parse_tree;;
-*)
+
 let primes_parse_tree = parse ecg_parse_table primes_prog;;
 let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 
+(* function to test interpretation of ecg *)
+let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
 (*
-let prog = "i := 0 while i < 5 write i i := i + 1 end write 10"
+let prog = "write 10"
 let prog_test = parse ecg_parse_table prog;; 
 let ast_prog = ast_ize_P prog_test;; 
 print_string (interpret ast_prog "")
 *)
 
-(* function to test interpretation of ecg *)
-let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
-
-(*
 	
   print_string (interpret sum_ave_syntax_tree "4 6");
     (* should print "10 5" *)
   print_newline ();
-*)
+
 
   print_string (interpret primes_syntax_tree "10");
     (* should print "2 3 5 7 11 13 17 19 23 29" *)
   print_newline ();
-  (*
+
+  
+(*
   print_string (interpret sum_ave_syntax_tree "4 foo");
-    (* should print "non-numeric input" *)in
+    (* should print "non-numeric input" *)
   print_newline ();
   print_string (ecg_run "write 3 write 2 / 0" "");
     (* should print "3 divide by zero" *)
   print_newline ();
+
   print_string (ecg_run "write foo" "");
     (* should print "foo: symbol not found" *)
   print_newline ();
   print_string (ecg_run "read a read b" "3");
     (* should print "unexpected end of input" *)
-
 *)
+
 
  (* #use "intp.ml";; *)
 

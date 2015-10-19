@@ -541,32 +541,6 @@ let ecg_parse_table = get_parse_table ecg;;
   use a different organization if you prefer.  This is provided in the
   hope you may find it useful.
 
-    Uses the following attribute grammar to build a syntax tree: 
-    P -> SL{P.val := SL.val}
-    SL1 -> S{SL2.st := "SL1.st, S.val"} SL2{SL1.val := SL2.val}  
-    SL -> e {SL.val := SL.st }
-    S -> id := E {S.val := ":=, id, E.val"}
-    S -> read id {S.val := "read id"}
-    S -> write E {S.val := "write E.val"}
-    S -> if C{SL.st := C.val} SL{S.val := "if, C.val, SL.val"} end 
-    S -> while C{SL.st := C.val} SL{S.val := "while, C.val, SL.val"} end 
-    C -> E1 == E2{C.val := "==, E1.val, E2.val"}
-    C -> E1 != E2{C.val := "!=, E1.val, E2.val"}
-    C -> E1 > E2{C.val := ">, E1.val, E2.val"}
-    C -> E1 < E2{C.val := "<, E1.val, E2.val"}
-    C -> E1 >= E2{C.val := ">=, E1.val, E2.val"}
-    C -> E1 <= E2{C.val := "<=, E1.val, E2.val"}
-    E -> T{TT.st := T.val} TT{E.val := TT.val}  
-    TT1 -> + T{TT2.st := "+, TT1.st, T.val"} TT2{TT1.val := TT2.val}
-    TT1 -> - T{TT2.st := "-, TT1.st, T.val"} TT2{TT1.val := TT2.val}
-    TT -> e {TT.val := TT.st}
-    T -> F{FT.st := F.val} FT{T.val := FT.val}
-    FT1 -> * F{FT2.st := "*, FT1.st, F.val"} FT2{FT1.val := FT2.val}
-    FT1 -> / F{FT2.st := "/, FT1.st, F.val"} FT2{FT1.val := FT2.val}
-    FT -> e {FT.val := FT.st}
-    F -> ( E ){F.val := E.val}
-    F -> id{F.val := "id"}
-    F -> lit{F.val := "lit"}
  *******************************************************************)
 
 type ast_sl = ast_s list
@@ -702,20 +676,6 @@ and ast_ize_C (c:parse_tree) : ast_c =
 
 (*******************************************************************
     Interpreter
-
-    type ast_sl = ast_s list
-      and ast_s =
-      | AST_error
-      | AST_assign of (string * ast_e)
-      | AST_read of string
-      | AST_write of ast_e
-      | AST_if of (ast_c * ast_sl)
-      | AST_while of (ast_c * ast_sl)
-      and ast_e =
-      | AST_binop of (string * ast_e * ast_e)
-      | AST_id of string
-      | AST_num of string
-      and ast_c = (string * ast_e * ast_e);;
  *******************************************************************)
 
 type memory = (string * int) list;;
@@ -723,7 +683,7 @@ type memory = (string * int) list;;
 (* If you do the extra credit, you might want an extra Boolean
    field in the tuple to indicate whether the value has been used. *)
 
-type value =    (* an integer or an error message *)
+type value =    (* an integer or a boolean or an error message *)
 | Value of int
 | Bool of bool 
 | Error of string;;
@@ -765,18 +725,18 @@ let rec lookup_id (mem:memory) (id:string) : value =
 ;;
 (* takes in memory with id and new value to change the value at that memory id, returns new memory*)
 let rec change_val (old_mem:memory) (new_mem:memory) (id:string) (v:int) : memory =
-  (*print_string ("\nUpdating Value of :  ");
-  print_string (id); print_string ( "->" ); print_int v;
-  print_string ("\n");*)
-  match old_mem with 
-  | [] -> (new_mem @ [id, v]);
-  | _ -> if (fst (hd old_mem) = id) then begin
-          (*print_string (fst (hd old_mem)); print_string (" : (match) " ); print_int v;*)
-          change_val (tl old_mem) new_mem id v; (*skip*)
-          end
+    (*print_string ("\nUpdating Value of :  ");
+    print_string (id); print_string ( "->" ); print_int v;
+    print_string ("\n");*)
+    match old_mem with 
+    | [] -> (new_mem @ [id, v]);
+    | _ -> if (fst (hd old_mem) = id) then begin
+        (*print_string (fst (hd old_mem)); print_string (" : (match) " ); print_int v;*)
+        change_val (tl old_mem) new_mem id v; (*skip*)
+        end
         else begin
-          (*print_string (fst (hd old_mem)); print_string (" : " ) ; print_int (snd (hd old_mem)); print_string ("  |"); *)
-          change_val (tl old_mem) (new_mem @ [hd old_mem]) id v; (*append old to new*)
+            (*print_string (fst (hd old_mem)); print_string (" : " ) ; print_int (snd (hd old_mem)); print_string ("  |"); *)
+            change_val (tl old_mem) (new_mem @ [hd old_mem]) id v; (*append old to new*)
         end
   ;;
 
@@ -836,15 +796,17 @@ let rec interpret (ast:ast_sl) (full_input:string) : string =
     : bool * memory * string list * string list =
     (* let us save lhs as name, rhs as value   
         if lhs is the same as a name already in the list, then replace the value of the name *)
-        let v = (int_of_val (interpret_expr rhs mem)) in 
+        let e = (interpret_expr rhs mem) in 
+        match e with 
+        | Error(err) -> (false, mem, inp, outp @ [err])
+        | Value(v)->
+        
         let mem1 = change_val mem [] lhs v in
         (true, mem1, inp, outp)
 
     and interpret_read (id:string) (mem:memory)
                    (inp:string list) (outp:string list)
     : bool * memory * string list * string list =
-
-    (*Input validation - is the input a string? !!!!!!*)
         if length inp = 0 then (false, mem, inp, outp @ [("unexpected end of input")])
         else begin
             (* Validate Integer input *)
@@ -906,77 +868,122 @@ and interpret_expr (expr:ast_e) (mem:memory) : value =
         -> Value (int_of_string(a) + int_of_string(b))
     (* E + num *)
     | AST_binop ("+", a, AST_num b) -> 
-        let c = interpret_expr a mem in
-        Value (int_of_val(c) + int_of_string(b))
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v) -> Value (v + int_of_string(b))
+            | Error(v) -> Error(v))
+                
     (* num + E *)
     | AST_binop ("+", AST_num a, b) -> 
-        let c = interpret_expr b mem in
-        Value (int_of_string(a) + int_of_val(c))
+        (let c = interpret_expr b mem in
+            match c with 
+            | Value(v) -> Value (int_of_string(a) + v)
+            | Error(v) -> Error(v))
+                
     (* E + E *)
     | AST_binop ("+", a, b) -> 
-        let c = interpret_expr a mem in
-        let d = interpret_expr b mem in
-        Value (int_of_val(c) + int_of_val(d))
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v1) -> 
+                (let d = interpret_expr b mem in
+                match d with 
+                    | Value(v2) -> Value (v1 + v2)
+                    | Error(v2) -> Error(v2))
+            | Error(v1) -> Error(v1))
         
-    (*SUBTRACTION*)
+    (*SUBSTRACTION*)
     (* num - num *)
     | AST_binop ("-", AST_num a, AST_num b) 
         -> Value (int_of_string(a) - int_of_string(b))
     (* E - num *)
     | AST_binop ("-", a, AST_num b) -> 
-        let c = interpret_expr a mem in
-        Value (int_of_val(c) - int_of_string(b))
-    (* num - E *)    
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v) -> Value (v - int_of_string(b))
+            | Error(v) -> Error(v))
+                
+    (* num - E *)
     | AST_binop ("-", AST_num a, b) -> 
-        let c = interpret_expr b mem in
-        Value (int_of_string(a) - int_of_val(c))
+        (let c = interpret_expr b mem in
+            match c with 
+            | Value(v) -> Value (int_of_string(a) - v)
+            | Error(v) -> Error(v))
+                
     (* E - E *)
     | AST_binop ("-", a, b) -> 
-        let c = interpret_expr a mem in
-        let d = interpret_expr b mem in
-        Value (int_of_val(c) - int_of_val(d))
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v1) -> 
+                (let d = interpret_expr b mem in
+                match d with 
+                    | Value(v2) -> Value (v1 - v2)
+                    | Error(v2) -> Error(v2))
+            | Error(v1) -> Error(v1))
 
-
-    (*MULTIPLICATION*)
+        (*MULTIPLICATION*)
     (* num * num *)
     | AST_binop ("*", AST_num a, AST_num b) 
         -> Value (int_of_string(a) * int_of_string(b))
     (* E * num *)
     | AST_binop ("*", a, AST_num b) -> 
-        let c = interpret_expr a mem in
-        Value (int_of_val(c) * int_of_string(b))
-    (* num * E *) 
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v) -> Value (v * int_of_string(b))
+            | Error(v) -> Error(v))
+                
+    (* num * E *)
     | AST_binop ("*", AST_num a, b) -> 
-        let c = interpret_expr b mem in
-        Value (int_of_string(a) * int_of_val(c))
+        (let c = interpret_expr b mem in
+            match c with 
+            | Value(v) -> Value (int_of_string(a) * v)
+            | Error(v) -> Error(v))
+                
     (* E * E *)
     | AST_binop ("*", a, b) -> 
-        let c = interpret_expr a mem in
-        let d = interpret_expr b mem in
-        Value (int_of_val(c) * int_of_val(d))
-        
-    (*DIVISION, remember to check for divide by zero *)
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v1) -> 
+                (let d = interpret_expr b mem in
+                match d with 
+                    | Value(v2) -> Value (v1 * v2)
+                    | Error(v2) -> Error(v2))
+            | Error(v1) -> Error(v1))
+
+    (*DIVISION*)
     (* num / num *)
-    | AST_binop ("/", AST_num a, AST_num b) -> 
+    | AST_binop ("", AST_num a, AST_num b) -> 
         if int_of_string(b) = 0 then Error("Error: divide by zero")
         else Value (int_of_string(a) / int_of_string(b))
     (* E / num *)
     | AST_binop ("/", a, AST_num b) -> 
-        let c = interpret_expr a mem in
-            if int_of_string(b) = 0 then Error("Error: divide by zero")
-            else Value (int_of_val(c) / int_of_string(b))
-    (* num / E *) 
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v) -> 
+                if int_of_string(b) = 0 then Error("Error: divide by zero")
+                else Value (v / int_of_string(b))
+            | Error(v) -> Error(v))
+                
+    (* num / E *)
     | AST_binop ("/", AST_num a, b) -> 
-        let c = interpret_expr b mem in
-        if int_of_val(c) = 0 then Error("Error: divide by zero")
-        else Value (int_of_string(a) / int_of_val(c))
+        (let c = interpret_expr b mem in
+            match c with 
+            | Value(v) -> 
+                if v = 0 then Error("Error: divide by zero")
+                else Value (int_of_string(a) / v)
+            | Error(v) -> Error(v))
+                
     (* E / E *)
     | AST_binop ("/", a, b) -> 
-        let c = interpret_expr a mem in
-        let d = interpret_expr b mem in
-        if int_of_val(d) = 0 then Error("Error: divide by zero")
-        else Value (int_of_val(c) / int_of_val(d))
-    
+        (let c = interpret_expr a mem in
+            match c with
+            | Value(v1) -> 
+                (let d = interpret_expr b mem in
+                match d with 
+                    | Value(v2) -> 
+                        if v2 = 0 then Error("Error: divide by zero")
+                        else Value (v1 / v2)
+                    | Error(v2) -> Error(v2))
+            | Error(v1) -> Error(v1) )
     (*ID*)
     | AST_id a -> lookup_id mem a
 
@@ -984,34 +991,34 @@ and interpret_expr (expr:ast_e) (mem:memory) : value =
     | AST_num a -> Value (int_of_string a)
 
     (* Not Found *)  
-    | _ -> Error ("Runitme Error in expression") 
+    | _ -> Error ("Runtime Error in expression") 
   
 
 and interpret_cond ((op:string), (lo:ast_e), (ro:ast_e)) (mem:memory)
+    (* colon value * memory = was removed as returning the memory was useless *)  
     : value =  
-    (* match up operator, then evaluate expressions *)
-    let one = (interpret_expr lo mem) in
+        let one = (interpret_expr lo mem) in
         let two = (interpret_expr ro mem) in 
-        match one with (*Here is an example of a value that is not matched: Bool _ *)
+        match one with  
         | Error(err) -> one (*return bad value *)
         | Value(v) -> 
-            match two with (*Here is an example of a value that is not matched: Bool _*)
+            match two with 
             | Error(err2) -> two (*return bad value *)
             | Value(v2) -> match op with 
-                | "==" 
-                    -> Bool((interpret_expr lo mem) = (interpret_expr ro mem))
-                | "!="     
-                    -> Bool((interpret_expr lo mem) != (interpret_expr ro mem))
-                | ">" 
-                    -> Bool((interpret_expr lo mem) > (interpret_expr ro mem))
-                | "<"
-                    -> Bool((interpret_expr lo mem) < (interpret_expr ro mem))
-                | ">=" 
-                    -> Bool((interpret_expr lo mem) >= (interpret_expr ro mem))
-                | "<=" 
-                    -> Bool((interpret_expr lo mem) <= (interpret_expr ro mem))
-                | _ -> Error("Runtime issue in cond\n")
-
+            | "==" 
+                -> Bool((one) = (two))
+            | "!="     
+                -> Bool((one) != (two))
+            | ">" 
+                -> Bool((one) > (two))
+            | "<"
+                -> Bool((one) < (two))
+            | ">=" 
+                -> Bool((one) >= (two))
+            | "<=" 
+                -> Bool((one) <= (two))
+          (* your code should replace the following line *)
+            | _ -> Error("Runtime issue in cond\n")
 ;;
 
 
@@ -1029,13 +1036,6 @@ let primes_syntax_tree = ast_ize_P primes_parse_tree;;
 
 (* function to test interpretation of ecg *)
 let ecg_run prog inp = interpret (ast_ize_P (parse ecg_parse_table prog)) inp;;
-(*
-let prog = "write 10"
-let prog_test = parse ecg_parse_table prog;; 
-let ast_prog = ast_ize_P prog_test;; 
-print_string (interpret ast_prog "")
-*)
-
 	
   print_string (interpret sum_ave_syntax_tree "4 6");
     (* should print "10 5" *)
@@ -1046,8 +1046,6 @@ print_string (interpret ast_prog "")
     (* should print "2 3 5 7 11 13 17 19 23 29" *)
   print_newline ();
 
-  
-(*
   print_string (interpret sum_ave_syntax_tree "4 foo");
     (* should print "non-numeric input" *)
   print_newline ();
@@ -1060,7 +1058,7 @@ print_string (interpret ast_prog "")
   print_newline ();
   print_string (ecg_run "read a read b" "3");
     (* should print "unexpected end of input" *)
-*)
+
 
 
  (* #use "intp.ml";; *)
